@@ -1,0 +1,1 @@
+var e=e=>!e.startsWith(`[`),t=e=>encodeURIComponent(e),n=(e,n=``,r=``)=>`mailto:${e}?subject=${t(n)}&body=${t(r)}`,r=(e,n=``,r=``)=>`https://mail.google.com/mail/?view=cm&fs=1&to=${t(e)}&su=${t(n)}&body=${t(r)}`;export{e as n,n as r,r as t};

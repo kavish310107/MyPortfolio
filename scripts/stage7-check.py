@@ -1,0 +1,45 @@
+import os
+os.environ['PLAYWRIGHT_BROWSERS_PATH']='/opt/pw-browsers'
+from playwright.sync_api import sync_playwright
+B='http://localhost:4180'; r=[]
+def ok(n,c): r.append(('PASS' if c else 'FAIL',n))
+with sync_playwright() as p:
+    b=p.chromium.launch(); pg=b.new_page(viewport={'width':1280,'height':800}); errs=[]
+    pg.on('pageerror',lambda e:errs.append(str(e))); pg.on('console',lambda m: m.type=='error' and '403' not in m.text and 'ERR_NAME_NOT_RESOLVED' not in m.text and errs.append(m.text))
+    pg.goto(B+'/certificates'); pg.wait_for_timeout(1000)
+    ok('6 certificates', pg.locator('article').count()==6)
+    pg.get_by_role('button',name='Workshop').click(); pg.wait_for_timeout(900); ok('category filter -> 2', pg.locator('article').count()==2)
+    pg.get_by_role('button',name='All').click(); pg.wait_for_timeout(700)
+    b1=pg.get_by_role('button', name='[CERTIFICATE 2 TITLE]'); b1.focus(); pg.keyboard.press('Enter'); pg.wait_for_timeout(700)
+    ok('cert modal opens (keyboard) + URL + focus inside', pg.locator('[role=dialog]').count()==1 and 'c=cert-2' in pg.url and pg.evaluate("!!document.activeElement.closest('[role=dialog]')"))
+    for _ in range(10): pg.keyboard.press('Tab')
+    ok('focus trapped', pg.evaluate("!!document.activeElement.closest('[role=dialog]')"))
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(700)
+    ok('Esc closes, focus back on card', pg.locator('[role=dialog]').count()==0 and pg.evaluate("document.activeElement.tagName==='BUTTON' && !!document.activeElement.closest('article')"))
+    pg.goto(B+'/blog'); pg.wait_for_timeout(1000)
+    ok('5 blog cards', pg.locator('article').count()==5)
+    pg.get_by_label('Search articles').fill('zzzz'); pg.wait_for_timeout(700); ok('blog empty state', pg.get_by_text('No articles match').count()==1)
+    pg.get_by_role('button',name='Clear filters').click(); pg.wait_for_timeout(700)
+    pg.get_by_role('button',name='Learning').click(); pg.wait_for_timeout(800); ok('blog category -> 2', pg.locator('article').count()==2)
+    pg.locator('article a').first.click(); pg.wait_for_timeout(900)
+    ok('post detail opens', '/blog/post-' in pg.url and pg.locator('article h1').count()==1)
+    pg.get_by_label('More articles').get_by_role('link').last.click(); pg.wait_for_timeout(800); ok('next/prev navigation', '/blog/post-' in pg.url)
+    pg.goto(B+'/blog/nope'); pg.wait_for_timeout(700); ok('unknown slug -> 404 page', pg.get_by_text('Page not found').count()==1)
+    pg.goto(B+'/activity'); pg.wait_for_timeout(1200)
+    ok('activity feed rows', pg.locator('ul li a.card').count()==9)
+    pg.get_by_role('button',name='Certificates').click(); pg.wait_for_timeout(900); ok('activity filter -> 2', pg.locator('ul li a.card').count()==2)
+    pg.locator('ul li a.card').first.click(); pg.wait_for_timeout(900); ok('feed item links to cert modal', '/certificates?c=' in pg.url and pg.locator('[role=dialog]').count()==1)
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(600)
+    pg.goto(B+'/'); pg.wait_for_timeout(700); pg.keyboard.press('g'); pg.keyboard.press('y'); pg.wait_for_timeout(700); ok('G Y -> activity', pg.url.endswith('/activity'))
+    pg.keyboard.press('g'); pg.keyboard.press('f'); pg.wait_for_timeout(700); ok('G F -> certificates', pg.url.endswith('/certificates'))
+    pg.keyboard.press('Control+k'); pg.wait_for_timeout(400); pg.keyboard.type('article 3'); pg.wait_for_timeout(300); pg.keyboard.press('Enter'); pg.wait_for_timeout(900)
+    ok('palette finds blog post', '/blog/post-3' in pg.url)
+    m=b.new_page(viewport={'width':375,'height':740}); 
+    for path in ['/certificates','/blog','/blog/post-1','/activity']:
+        m.goto(B+path); m.wait_for_timeout(900); ok('no overflow @375 '+path, m.evaluate("document.documentElement.scrollWidth<=window.innerWidth+1"))
+    m.goto(B+'/'); m.wait_for_timeout(700); m.get_by_label('More pages').click(); m.wait_for_timeout(600)
+    bx=m.locator('#more-menu').bounding_box(); ok('More menu fits viewport (8 items)', bx and bx['y']>=0 and bx['x']>=0 and bx['x']+bx['width']<=376)
+    ok('no errors '+';'.join(errs)[:150], not errs)
+    m.screenshot(path='/tmp/more.png')
+    b.close()
+for x in r: print(*x)
